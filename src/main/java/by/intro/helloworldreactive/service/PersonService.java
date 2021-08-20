@@ -1,53 +1,63 @@
 package by.intro.helloworldreactive.service;
 
-import by.intro.helloworldreactive.dto.PersonDto;
+import by.intro.helloworldreactive.model.Person;
+import by.intro.helloworldreactive.repository.PersonRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.util.Arrays;
-import java.util.List;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
 public class PersonService {
 
-    List<PersonDto> men = Arrays.asList(
-            new PersonDto("Alex", 18, "alex@email.com"),
-            new PersonDto("Bob", 32, "bob@email.com")
-    );
-    List<PersonDto> women = Arrays.asList(
-            new PersonDto("Lina", 44, "lina@email.com"),
-            new PersonDto("Regina", 20, "regina@email.com")
-    );
+    private final PersonRepository personRepository;
 
-    public Flux<PersonDto> getMen() {
-        return Flux.fromIterable(men);
-    }
-
-    public Flux<PersonDto> getAllPersons() {
-        return Flux.merge(Flux.fromIterable(men), Flux.fromIterable(women));
+    public Flux<Person> getAllPersons() {
+        return personRepository.findAll();
     }
 
     public Flux<Object> getGroupsByNameLength() {
-        return Flux.merge(Flux.fromIterable(men), Flux.fromIterable(women))
+        return personRepository.findAll()
                 .groupBy(personDto -> personDto.getName().length())
                 .concatMap(Flux::collectList);
     }
 
-    public Flux<PersonDto> getAllPersonsWithChangedEmail() {
-        return Flux.merge(Flux.fromIterable(men), Flux.fromIterable(women))
+    public Flux<Person> getAllPersonsWithChangedEmail() {
+        return personRepository.findAll()
                 .map(personDto -> {
-                    personDto.setEmail(personDto.getEmail().replaceAll("email.com", "company.com"));
+                    personDto.setEmail(personDto.getEmail().replaceAll("@.{2,255}\\.[a-z]{2,}$", "@company.com"));
                     return personDto;
                 });
     }
 
-    public Mono<PersonDto> getOldestPerson() {
-        return Flux.merge(Flux.fromIterable(men), Flux.fromIterable(women))
-                .sort(PersonDto::compareTo)
+    public Mono<Person> getOldestPerson() {
+        return personRepository.findAll()
+                .sort(Person::compareTo)
                 .last();
+    }
+
+    public Mono<Person> addPerson(Person person) {
+        return personRepository.save(person);
+    }
+
+    public Flux<Person> addAllPersons(Flux<Person> persons) {
+        return personRepository.saveAll(persons);
+    }
+
+    public Mono<Person> getPersonById(String id) {
+        return personRepository.findById(id);
+    }
+
+    public Mono<Person> deletePerson(String id) {
+        Mono<Person> dbPerson = getPersonById(id);
+        if (Objects.isNull(dbPerson)) {
+            return Mono.empty();
+        }
+        return getPersonById(id).switchIfEmpty(Mono.empty()).filter(Objects::nonNull).flatMap(personToBeDeleted -> personRepository
+                .delete(personToBeDeleted).then(Mono.just(personToBeDeleted)));
     }
 
 }
